@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phone sensor check</title>
+ 
+  <style>
+    /* ---------- colors ---------- */
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f5f2;
+      --text: #1c1f22;
+      --muted: #666c72;
+      --card: #ffffff;
+      --line: #d8dad6;
+      --accent: #1f119c;
+      --warn: #9a6700;
+      --bad: #b3261e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #15181a;
+        --text: #e8eaea;
+        --muted: #9aa1a6;
+        --card: #1e2225;
+        --line: #30363a;
+        --accent: #45b8fa;
+        --warn: #e3b341;
+        --bad: #ff8a80;
+      }
+    }
+ 
+    /* ---------- layout ---------- */
+    * { box-sizing: border-box; }
+ 
+    body {
+      max-width: 32rem;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+      background: var(--bg);
+      color: var(--text);
+      font: 17px/1.5 system-ui, sans-serif;
+    }
+ 
+    h1 { font-size: 1.4rem; margin: 0 0 4px; }
+    h2 { font-size: 1.1rem; margin: 0 0 4px; }
+    p  { margin: 4px 0; color: var(--muted); }
+ 
+    section {
+      margin-top: 16px;
+      padding: 14px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+ 
+    /* ---------- buttons ---------- */
+    button {
+      width: 100%;
+      margin-top: 10px;
+      padding: 14px;
+      font: inherit;
+      font-weight: 600;
+      color: #fff;
+      background: var(--accent);
+      border: 2px solid var(--accent);
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    button.secondary { color: var(--accent); background: transparent; }
+    button:disabled { opacity: 0.4; }
+    button:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+ 
+    /* ---------- status + progress bar ---------- */
+    #status { margin: 20px 0 6px; font-size: 1.4rem; font-weight: 700; min-height: 2.2rem; }
+    #bar    { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+    #fill   { height: 100%; width: 0; background: var(--accent); }
+ 
+    /* ---------- results ---------- */
+    #verdict { margin: 0 0 8px; font-size: 1.2rem; font-weight: 700; color: var(--text); }
+    table    { width: 100%; border-collapse: collapse; }
+    td       { padding: 5px 0; border-top: 1px solid var(--line); }
+    td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+ 
+    .pass { color: var(--accent) !important; }
+    .warn { color: var(--warn) !important; }
+    .fail { color: var(--bad) !important; }
+  </style>
+</head>
+ 
+<body>
+  <h1>Check de sensores</h1>
+  <p>Testear en una mesa u otra superficie completamente plana.</p>
+ 
+    <p>
+    <label>Telefono: <input id="phoneName" placeholder="e.g. Pixel 7 #2"></label>
+    </p>
+
+  <!-- test 1: variación giroscopio -->
+  <section>
+    <h2>1. Test de deriva giroscopio (toe)</h2>
+    <p>El telefono tiene que quedar quieto y plano. Test de 10s.</p>
+    <button id="driftBtn">Empezar test</button>
+  </section>
+ 
+  <!-- test 2: tilt offset -->
+  <section>
+    <h2>2. Test acelerómetro (camber / caster)</h2>
+    <p>Telefono plano, pantalla arriba. Grabar, girar 180° EN EL MISMO LUGAR, grabar de nuevo.</p>
+    <button id="tiltBtn">Primera grabación</button>
+  </section>
+ 
+  <div id="status">Listo</div>
+  <div id="bar"><div id="fill"></div></div>
+ 
+  <!-- shown after a test finishes -->
+  <section id="result" hidden>
+    <p id="verdict"></p>
+    <table id="details"></table>
+    <button id="downloadBtn" class="secondary">Descargar CSV</button>
+  </section>
+ 
+  <script>
+    // ---------- settings (edit these) ----------
+    const COUNTDOWN_S  = 3;     // wait before recording
+    const DRIFT_S      = 10;    // drift test length
+    const TILT_S       = 5;     // each tilt reading
+    const PASS_DEG     = 0.05;  // drift below this = pass
+    const MARGINAL_DEG = 0.1;   // drift below this = marginal
+    const MOVED_DEG_S  = 0.5;   // gyro spike above this = phone moved
+ 
+    // ---------- state ----------
+    let runs = [];        // recorded data: [{ label, rows }]
+    let tiltFirst = null; // tilt result of position 1
+    let tiltStep = 1;     // 1 or 2
+ 
+    // ---------- page elements ----------
+    const $ = id => document.getElementById(id);
+    const driftBtn    = $('driftBtn');
+    const tiltBtn     = $('tiltBtn');
+    const downloadBtn = $('downloadBtn');
+ 
+    // ---------- small math helpers ----------
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const mean  = list => list.reduce((sum, x) => sum + x, 0) / list.length;
+    const std   = list => Math.sqrt(mean(list.map(x => (x - mean(list)) ** 2)));
+    const toDeg = rad => (rad * 180) / Math.PI;
+ 
+    // ---------- recording ----------
+ 
+    // iOS asks for permission, Android doesn't
+    async function askMotionPermission() {
+      const M = window.DeviceMotionEvent;
+      if (M && typeof M.requestPermission === 'function') {
+        const answer = await M.requestPermission();
+        if (answer !== 'granted') throw new Error('Motion access denied');
+      }
+    }
+ 
+    // countdown, then collect samples for `seconds`
+    async function record(label, seconds) {
+      const rows = [];
+ 
+      const onMotion = e => {
+        const a = e.accelerationIncludingGravity;
+        const r = e.rotationRate;
+        if (!a || !r || a.x == null || r.alpha == null) return;
+        // gyro in deg/s: beta = around x, gamma = around y, alpha = around z
+        rows.push({
+          t: e.timeStamp,
+          ax: a.x, ay: a.y, az: a.z,
+          gx: r.beta, gy: r.gamma, gz: r.alpha,
+        });
+      };
+ 
+      for (let s = COUNTDOWN_S; s > 0; s--) {
+        setStatus('Empieza en ' + s);
+        await sleep(1000);
+      }
+ 
+      window.addEventListener('devicemotion', onMotion);
+      const start = performance.now();
+      while (performance.now() - start < seconds * 1000) {
+        const elapsed = (performance.now() - start) / 1000;
+        setStatus('Grabando... ' + Math.ceil(seconds - elapsed) + ' s');
+        setProgress(elapsed / seconds);
+        await sleep(100);
+      }
+      window.removeEventListener('devicemotion', onMotion);
+      setProgress(1);
+ 
+      if (rows.length < 50) {
+        throw new Error('No se encuentran sensores. Usar Android o iOS con HTTPS');
+      }
+      runs.push({ label, rows });
+      return rows;
+    }
+ 
+    // ---------- analysis: drift ----------
+ 
+    // average gravity direction as a unit vector
+    function gravityDirection(rows) {
+      const x = mean(rows.map(r => r.ax));
+      const y = mean(rows.map(r => r.ay));
+      const z = mean(rows.map(r => r.az));
+      const size = Math.hypot(x, y, z);
+      return { x: x / size, y: y / size, z: z / size, size };
+    }
+ 
+    function analyzeDrift(rows) {
+      const g = gravityDirection(rows);
+ 
+      // turn rate around the vertical axis only
+      const rate = rows.map(r => r.gx * g.x + r.gy * g.y + r.gz * g.z);
+ 
+      // bias from the first half of the run
+      const half = Math.floor(rows.length / 2);
+      const bias = mean(rate.slice(0, half));
+ 
+      // integrate the second half with bias removed
+      let yaw = 0;
+      let peak = 0;
+      for (let i = half + 1; i < rows.length; i++) {
+        const dt = (rows[i].t - rows[i - 1].t) / 1000;
+        yaw += (rate[i] - bias) * dt;
+        peak = Math.max(peak, Math.abs(yaw));
+      }
+ 
+      const spike = Math.max(...rate.map(x => Math.abs(x - bias)));
+      const seconds = (rows[rows.length - 1].t - rows[0].t) / 1000;
+ 
+      return { yaw, peak, bias, spike, gravity: g.size, hz: rows.length / seconds };
+    }
+ 
+    // ---------- analysis: tilt ----------
+ 
+    // average tilt of the phone's x and y axes, in degrees
+    function measureTilt(rows) {
+      const tiltX = rows.map(r => toDeg(Math.atan2(r.ax, Math.hypot(r.ay, r.az))));
+      const tiltY = rows.map(r => toDeg(Math.atan2(r.ay, Math.hypot(r.ax, r.az))));
+      return {
+        x: mean(tiltX),
+        y: mean(tiltY),
+        noise: Math.max(std(tiltX), std(tiltY)),
+      };
+    }
+ 
+    // after the spin, the surface tilt flips sign but the phone offset doesn't
+    function combineTilt(a, b) {
+      return {
+        offsetX: (a.x + b.x) / 2,   // phone
+        offsetY: (a.y + b.y) / 2,
+        surfaceX: (a.x - b.x) / 2,  // table
+        surfaceY: (a.y - b.y) / 2,
+        noise: Math.max(a.noise, b.noise),
+      };
+    }
+ 
+    // ---------- showing results ----------
+    function setStatus(text)    { $('status').textContent = text; }
+    function setProgress(frac)  { $('fill').style.width = frac * 100 + '%'; }
+ 
+    // rows = [[label, value], ...]
+    function showResult(verdictText, verdictClass, rows, note) {
+      $('verdict').textContent = verdictText;
+      $('verdict').className = verdictClass;
+ 
+      let html = rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join('');
+      if (note) html += `<tr><td colspan="2" class="warn">${note}</td></tr>`;
+      $('details').innerHTML = html;
+ 
+      $('result').hidden = false;
+    }
+ 
+    function setBusy(busy) {
+      driftBtn.disabled = busy;
+      tiltBtn.disabled = busy;
+    }
+ 
+    // ---------- test 1: drift ----------
+    driftBtn.onclick = async () => {
+      setBusy(true);
+      $('result').hidden = true;
+      runs = [];
+      tiltStep = 1;
+      tiltBtn.textContent = 'Grabar posición 1';
+ 
+      try {
+        await askMotionPermission();
+        const rows = await record('drift', DRIFT_S);
+        const d = analyzeDrift(rows);
+ 
+        let verdict = 'APROBADO: El drift no supera ' + PASS_DEG + '°';
+        let css = 'pass';
+        if (d.peak >= MARGINAL_DEG) { verdict = 'Falla: Demasiado drift: ' + MARGINAL_DEG + '° o mayor'; css = 'fail'; }
+        else if (d.peak >= PASS_DEG) { verdict = 'MARGINAL: drift entre ' + PASS_DEG + '° y ' + MARGINAL_DEG + '°'; css = 'warn'; }
+ 
+        const moved = d.spike > MOVED_DEG_S || Math.abs(d.gravity - 9.81) > 1.5;
+        showResult(verdict, css, [
+          ['Max drift (v) (segunda mitad)', d.peak.toFixed(3) + '°'],
+          ['drift (v) al final',          d.yaw.toFixed(3) + '°'],
+          ['Gyro offset (bias)',        d.bias.toFixed(4) + ' °/s'],
+          ['Muestreo',               d.hz.toFixed(1) + ' Hz'],
+          ['Magnitud de la gravedad',         d.gravity.toFixed(2) + ' m/s²'],
+        ], moved ? 'Capaz se movio el teléfono. Intentá de nuevo' : '');
+ 
+        setStatus('Listo');
+      } catch (err) {
+        setStatus('Error: ' + err.message);
+      }
+      setBusy(false);
+    };
+ 
+    // ---------- test 2: tilt (two steps) ----------
+    tiltBtn.onclick = async () => {
+      setBusy(true);
+      try {
+        await askMotionPermission();
+ 
+        if (tiltStep === 1) {
+          $('result').hidden = true;
+          runs = [];
+          tiltFirst = measureTilt(await record('tilt_pos1', TILT_S));
+          tiltStep = 2;
+          tiltBtn.textContent = 'Graba posicion 2';
+          setStatus('Da vuelta el telefono 180°, en la misma posicion, y apretá');
+        } else {
+          const second = measureTilt(await record('tilt_pos2', TILT_S));
+          const t = combineTilt(tiltFirst, second);
+          const f = x => x.toFixed(3) + '°';
+ 
+          showResult('Tilt result', '', [
+            ['Offset en X',       f(t.offsetX)],
+            ['Offset en Y',       f(t.offsetY)],
+            ['Declive posicion (x)',         f(t.surfaceX)],
+            ['Declive posicion (y) ',         f(t.surfaceY)],
+            ['Ruido',    f(t.noise)],
+          ], 'Repetí >3 veces. Los offset deberían estar ~0.05°.');
+ 
+          tiltStep = 1;
+          tiltBtn.textContent = 'Grabar posicion 1';
+          setStatus('Done');
+        }
+      } catch (err) {
+        setStatus('Error: ' + err.message);
+      }
+      setBusy(false);
+    };
+ // ---------- device info ----------
+    async function getDeviceInfo() {
+    const name = $('phoneName').value.trim() || 'unnamed';
+
+    // Chrome + Android
+    let model = '';
+    if (navigator.userAgentData) {
+        const h = await navigator.userAgentData.getHighEntropyValues(['model']);
+        model = h.model;
+    }
+
+    // commas would break the CSV columns
+    const browser = navigator.userAgent.replace(/,/g, ';');
+    return { name, model, browser };
+    }
+    
+    // ---------- CSV download ----------
+    downloadBtn.onclick = async () => {
+    const dev = await getDeviceInfo();
+
+    const header = 'nombre,modelo,browser,run,t_ms,ax,ay,az,gx_deg_s,gy_deg_s,gz_deg_s\n';
+    const lines = runs.flatMap(run =>
+        run.rows.map(r => [dev.name, dev.model, dev.browser, run.label,
+                        r.t, r.ax, r.ay, r.az, r.gx, r.gy, r.gz].join(','))
+    );
+
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([header + lines.join('\n')], { type: 'text/csv' }));
+    link.download = dev.name.replace(/\W+/g, '_') + '_' + new Date().toISOString().replace(/[:.]/g, '-') + '.csv';
+    link.click();
+    };
+  </script>
+</body>
+</html>
