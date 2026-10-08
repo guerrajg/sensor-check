@@ -188,6 +188,7 @@
         await sleep(100);
       }
       window.removeEventListener('devicemotion', onMotion);
+      beep();
       setProgress(1);
  
       if (rows.length < 50) {
@@ -378,6 +379,17 @@
     link.download = dev.name.replace(/\W+/g, '_') + '_' + new Date().toISOString().replace(/[:.]/g, '-') + '.csv';
     link.click();
     };
+
+    function beep(freq = 880, ms = 150) {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = freq;
+      osc.connect(gain).connect(ctx.destination);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      osc.start();
+      osc.stop(ctx.currentTime + ms / 1000);
+    }
   </script>
 </body>
 </html>
