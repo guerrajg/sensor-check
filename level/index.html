@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nivel digital</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+ 
+<body>
+  <main class="page">
+ 
+    <header>
+      <h1>Nivel digital</h1>
+    </header>
+ 
+    <!-- SENSORS -->
+    <section class="panel">
+      <button id="enableButton" class="button button-primary">Activar sensores</button>
+      <p id="sensorMessage" class="message"></p>
+    </section>
+ 
+    <!-- SETTINGS -->
+    <section class="panel">
+      <label class="field">
+        Posición del celular
+        <select id="orientationSelect">
+          <option value="flat">Plano, apoyado sobre una superficie</option>
+          <option value="upright">Parado contra una superficie</option>
+        </select>
+      </label>
+      <label class="field field-inline">
+        <input id="invertCheckbox" type="checkbox">
+        Invertir signos (iPhone)
+      </label>
+    </section>
+ 
+    <!-- LEVEL -->
+    <section id="levelPanel" class="panel level-panel" data-status="waiting">
+      <svg class="level" viewBox="-100 -100 200 200" role="img" aria-label="Nivel de burbuja">
+        <circle class="level-ring" r="90"/>
+        <line class="level-cross" x1="-90" y1="0" x2="90" y2="0"/>
+        <line class="level-cross" x1="0" y1="-90" x2="0" y2="90"/>
+        <circle id="levelTarget" class="level-target" r="10"/>
+        <circle id="levelDot" class="level-dot" r="7" cx="0" cy="0"/>
+      </svg>
+ 
+      <p id="statusLabel" class="status-label"></p>
+      <p id="guidance" class="guidance"></p>
+ 
+      <dl class="readouts">
+        <div class="readout">
+          <dt id="axisXLabel"></dt>
+          <dd id="axisXValue"></dd>
+        </div>
+        <div class="readout">
+          <dt id="axisYLabel"></dt>
+          <dd id="axisYValue"></dd>
+        </div>
+      </dl>
+ 
+      <div class="field">
+        Escala
+        <div id="zoomButtons" class="button-row"></div>
+      </div>
+    </section>
+ 
+    <!-- REFERENCE -->
+    <section class="panel">
+      <h2 class="panel-title">Referencia</h2>
+      <p class="message">Guardá la posición actual como cero para comparar otros puntos.</p>
+      <div class="button-row">
+        <button id="referenceSetButton" class="button" disabled>Fijar referencia acá</button>
+        <button id="referenceClearButton" class="button">Borrar</button>
+      </div>
+      <p id="referenceInfo" class="message"></p>
+    </section>
+ 
+    <!-- CALIBRATION -->
+    <section class="panel">
+      <h2 class="panel-title">Calibración</h2>
+      <p id="calibrationMessage" class="message"></p>
+      <button id="calibrationButton" class="button" disabled></button>
+      <p id="calibrationInfo" class="message"></p>
+    </section>
+ 
+  </main>
+ 
+  <script src="config.js"></script>
+  <script src="texts.js"></script>
+  <script src="sensors.js"></script>
+  <script src="tilt.js"></script>
+  <script src="level.js"></script>
+  <script src="reference.js"></script>
+  <script src="calibration.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

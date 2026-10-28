@@ -1,0 +1,250 @@
+/* VARIABLES */
+:root {
+  color-scheme: light dark;
+
+  --color-background: #0a0227;
+  --color-surface: #ffffff;
+  --color-text: #1b1d1f;
+  --color-muted: #6b7075;
+  --color-border: #dcdcd6;
+  --color-accent: #1b1d1f;
+  --color-accent-text: #ffffff;
+
+  --color-good: #2e9e6b;
+  --color-close: #d9a21b;
+  --color-far: #d4483b;
+  --color-waiting: #a9adb1;
+
+  --font-family: system-ui, sans-serif;
+  --font-size-small: 0.875rem;
+  --font-size-medium: 1.25rem;
+  --font-size-large: 2rem;
+
+  --space-small: 8px;
+  --space-medium: 16px;
+  --space-large: 24px;
+
+  --radius: 8px;
+  --border-width: 1px;
+  --page-width: 28rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #09112c;
+    --color-surface: #14212e;
+    --color-text: #ecedee;
+    --color-muted: #9aa0a6;
+    --color-border: #477cad;
+    --color-accent: #ecedee;
+    --color-accent-text: #131517;
+  }
+}
+
+
+/* BASE */
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  line-height: 1.5;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+
+/* LAYOUT */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-medium);
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: var(--space-large) var(--space-medium);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-small);
+  padding: var(--space-medium);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: 0px 0px 25px 25px / 0px 0px 50px 50px;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.message {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+
+/* FORM */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-small);
+}
+
+select {
+  padding: 10px;
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-background);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: 0px 0px 0px 0px;  
+}
+
+
+/* BUTTONS */
+.button {
+  padding: 12px var(--space-medium);
+  font: inherit;
+  color: var(--color-text);
+  background: transparent;
+  border: thick double #155355;
+  border-radius: 150px 150px 150px 150px;
+  cursor: pointer;
+}
+
+.button-primary {
+  color: var(--color-accent-text);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.button.is-active {
+  border-color: var(--color-text);
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.button-row {
+  display: flex;
+  gap: var(--space-small);
+}
+
+.button-row .button {
+  flex: 1;
+}
+
+.button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+
+/* LEVEL COLORS */
+.level-panel {
+  --level-color: var(--color-waiting);
+}
+
+.level-panel[data-status="good"] {
+  --level-color: var(--color-good);
+}
+
+.level-panel[data-status="close"] {
+  --level-color: var(--color-close);
+}
+
+.level-panel[data-status="far"] {
+  --level-color: var(--color-far);
+}
+
+
+/* LEVEL DRAWING */
+.level {
+  width: 100%;
+  max-width: 20rem;
+  margin: 0 auto;
+}
+
+.level-ring,
+.level-cross {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-width: 2;
+}
+
+.level-target {
+  fill: none;
+  stroke: var(--level-color);
+  stroke-width: 2;
+}
+
+.level-dot {
+  fill: var(--level-color);
+}
+
+
+/* READOUTS */
+.status-label {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-size-large);
+  font-weight: 600;
+  color: var(--level-color);
+}
+
+.guidance {
+  min-height: 1.5em;
+  margin: 0;
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.readouts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-small);
+  margin: 0;
+}
+
+.readout {
+  padding: var(--space-small) var(--space-medium);
+  background: var(--color-background);
+  border-radius: var(--radius);
+}
+
+.readout dt {
+  color: var(--color-muted);
+  font-size: var(--font-size-small);
+}
+
+.readout dd {
+  margin: 0;
+  font-size: var(--font-size-medium);
+  font-variant-numeric: tabular-nums;
+}
