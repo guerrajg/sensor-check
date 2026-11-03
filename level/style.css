@@ -83,7 +83,7 @@ h1 {
   padding: var(--space-medium);
   background: var(--color-surface);
   border: var(--border-width) solid var(--color-border);
-  border-radius: 0px 0px 25px 25px / 0px 0px 50px 50px;
+  border-radius: 10px 50px / 60px;
 }
 
 .panel-title {
